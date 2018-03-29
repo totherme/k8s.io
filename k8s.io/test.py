@@ -15,7 +15,7 @@ import ssl
 import subprocess
 import unittest
 import urllib
-
+import re
 import yaml
 
 def rand_num():
@@ -353,15 +353,34 @@ class ContentTest(unittest.TestCase):
         expected_body = urllib.urlopen(expected_content_url).read()
         self.assertMultiLineEqual(body, expected_body)
 
+    def assert_body_equal(self, url, expected_body):
+        resp, body = do_get(url)
+        self.assertEqual(resp.status, 200)
+        self.maxDiff = None
+        self.assertMultiLineEqual(
+            re.sub("\s+", " ", body),
+            re.sub("\s+", " ", expected_body)
+        )
+
     def test_go_get(self):
-        # FIXME: need to fix this if we keep this idea.
         base = 'https://k8s.io'
         suff = '%d?go-get=1' % rand_num()
+        template = """
+                  <html><head>
+                        <meta name="go-import"
+                              content="k8s.io/{0}
+                                       git https://github.com/kubernetes/{0}">
+                        <meta name="go-source"
+                              content="k8s.io/{0}
+                                       https://github.com/kubernetes/{0}
+                                       https://github.com/kubernetes/{0}/tree/master{{/dir}}
+                                       https://github.com/kubernetes/{0}/blob/master{{/dir}}/{{file}}#L{{line}}">
+                  </head></html>
+"""
         for pkg in ('kubernetes', 'heapster', 'kube-ui'):
-            self.assert_body_configmap('%s/%s/%s' % (base, pkg, suff),
-                'golang/%s.html' % pkg)
-        resp, body = do_get(base + '/foobar/123?go-get=1')
-        self.assertEqual(resp.status, 404)
+          expected_body = template.format(pkg)
+          url = '%s/%s/%s' % (base, pkg, suff)
+          self.assert_body_equal(url, expected_body)
 
     def test_get(self):
         for base in ('http://get.k8s.io', 'http://get.kubernetes.io'):
